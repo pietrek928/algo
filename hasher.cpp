@@ -8,6 +8,8 @@
 #include <cstring>
 #include <stdint.h>
 #include <unordered_set>
+#include <unordered_map>
+#include <tuple>
 #include <typeinfo>
 
 #define WHILEs1( a... ) while ( (a) );
@@ -21,13 +23,27 @@ typedef uint32_t uint;
 
 template<class T>
 inline T *obj_malloc( uint sz ) {
-    auto r = malloc( sz * sizeof(T) );
-    return *(T**)&r;
+    void *r = malloc( sz * sizeof(T) );
+    if ( !r ) throw bad_alloc();
+    return (T*)r;
+}
+
+template<class T1, class T2>
+inline auto obj_malloc( uint sz1, uint sz2 ) {
+    auto sz1_full = sz1 * sizeof(T1);
+    auto sz2_full = sz2 * sizeof(T2);
+    void *p = malloc( sz1_full + sz2_full );
+    if ( !p ) throw bad_alloc();
+    return make_tuple(
+        (T1*)p,
+        (T2*)(((byte*)p)+sz1_full)
+    );
 }
 
 template<class T>
 inline T *obj_realloc( T *A, uint sz ) {
     auto r = realloc( A, sz * sizeof(T) );
+    if ( !r ) throw bad_alloc();
     return *(T**)&r;
 }
 
@@ -111,8 +127,8 @@ class hasher {
         auto i = tab;
         if ( i < _e )
         do {
-            i->nxt = NULL;
             auto p = _find<Ep>( i->v.key );
+            i->nxt = NULL;
             *(p._i) = i;
         } while ( ++i < _e  );
     }
@@ -159,7 +175,7 @@ class hasher {
 
         inline auto _find( typename T::key_t k ) {
             auto p = enter_tab + k.hash( mod );
-            union {
+            struct {
                 T *i;
                 bool f;
             } r;
@@ -218,12 +234,16 @@ class hasher {
     }
 
     void add( T v ) { // TODO: when increase mod ?
+        __label__ _func_beg;
+        _func_beg:; // no object with destructor and constructor there !!!
         auto p = _find<Ep>( v.key );
         if ( p ) {
             (*p).val = v.val;
         } else {
-            if ( n == sz )
+            if ( n >= sz ) {
                 inc_size();
+                goto _func_beg;
+            }
             auto vo = tab + (n++); // TODO: custom allocator, varying size
             vo->v = v;
             vo->nxt = NULL;
@@ -264,12 +284,12 @@ class hasher {
         if ( r )
             return (*r).val;
         throw out_of_range("key");
-        /*decltype(T::val) v; // FIXME: exception ?
+        /*decltype(T::val) v;
         v.set_none();
         return v;*/
     }
 
-    auto &operator[]( decltype(T::key) k ) { // TODO: when increase mod ?
+    auto &operator[]( decltype(T::key) k ) {
         auto p = _find<Ep>( k );
         if ( p ) {
             return (*p).val;
@@ -314,11 +334,6 @@ class ptr_wrap {
         inline operator bool() {
             return v;
         }
-
-        inline auto &set_none() {
-            v = NULL;
-            return *this;
-        }
     } key;
     class val_t {
         int a[0];
@@ -359,29 +374,29 @@ int main() { // speed tests
     printf("=%d\n",m.check((int*)2));//*/
     unordered_set<int*> s;
     hasher<ptr_wrap<int>> n;
-    for ( int i=1; i<1000000; i++ ) {
-            //printf("%d\n",i);
+    for ( int i=1; i<20000000; i++ ) {
 #ifdef MY_HASH
-            n.add((int*)(i*101));
+            n.add((int*)(i*10));
 #else
-            s.insert((int*)(i*101));
+            s.insert((int*)(i*10));
 #endif
         }
 #if defined MY_HASH && defined STATIC_HASH
     auto ni = n.immutable();
 #endif
-    for ( int j=0; j<50; j++ ) {
+    volatile bool a;
+    for ( int j=0; j<5; j++ ) {
         //s.clear();
-        for ( int i=1; i<1500000; i++ ) {
-            //printf("%d\n",i);
+        for ( int i=1; i<300000000; i++ ) {
+            int *x = (int*)(i*5);
 #ifdef MY_HASH
 #ifdef STATIC_HASH
-            ni.check((int*)(i*101));
+            a=ni.check(x);
 #else
-            n.check((int*)(i*101));
+            a=n.check(x);
 #endif
 #else
-            s.find((int*)(i*101));
+            s.find(x);
 #endif
         }
         //auto v2 = n.immutable();
