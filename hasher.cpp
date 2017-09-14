@@ -50,7 +50,6 @@ class hasher {
     struct E {
         T v;
         E *nxt;
-        inline operator T() {return v;}
     } *tab, **enter_tab;
     struct Ei {
         E *i;
@@ -101,11 +100,13 @@ class hasher {
         return i;
     }
 
+    // _sz >= n !!!!!!!!!
     inline void _resize( uint _sz, uint _mod ) {
-        mod = _mod;
+        mod = _mod; // TODO: reorder elements
         sz = _sz;
         tab = obj_realloc( tab, sz );
-        enter_tab = obj_realloc( enter_tab, mod );
+        free(enter_tab);
+        enter_tab = obj_malloc<E*>( mod );
         obj_memzero( enter_tab, mod );
         auto _e = tab+n;
         auto i = tab;
@@ -119,7 +120,7 @@ class hasher {
 
     __attribute__(( noinline ))
     void inc_size() {
-        _resize( sz*2, mod*2+1 );
+        _resize( sz*2, mod*2-1 );
     }
 
     class _stat {
@@ -146,7 +147,7 @@ class hasher {
                 } while ( ++j );
             } while ( ++i < _e );
             *et = wsk;
-            tab = obj_realloc( tab, wsk-tab );
+            //tab = obj_realloc( tab, wsk-tab );
         }
 
         public:
@@ -158,14 +159,15 @@ class hasher {
         }
 
         inline auto _find( typename T::key_t k ) {
-            auto p = enter_tab + k.hash( mod );
             union {
                 T *i;
                 bool f;
             } r;
-            r.i = p[0];
-            auto e = p[1];
-            if ( r.i < e ) {
+            auto hpos = k.hash( mod );
+            auto p = enter_tab + hpos;
+            r.i = *p;
+            auto e = *(p+1);
+            if ( e > r.i ) {
                 do {
                     if ( r.i->key == k ) {
                         r.f = 1;
@@ -225,9 +227,9 @@ class hasher {
             if ( n == sz )
                 inc_size();
             auto vo = tab + (n++); // TODO: custom allocator, varying size
+            *(p._i) = vo;
             vo->v = v;
             vo->nxt = NULL;
-            *(p._i) = vo;
         }
     }
 
@@ -335,11 +337,11 @@ auto aaaa( hasher<ptr_wrap<int>> *m, int *b ) {
 }
 
 auto bbbb( hasher<ptr_wrap<int>> *m, int *b ) {
-    return (*m).get( b );
+    return (*m).check( b );
 }
 
 auto cccc( hasher<ptr_wrap<int>>::_stat *m, int *b ) {
-    return (*m)[ b ];
+    return (*m).check( b );
 }
 
 int main() { // speed tests
@@ -370,15 +372,16 @@ int main() { // speed tests
 #if defined MY_HASH && defined STATIC_HASH
     auto ni = n.immutable();
 #endif
+    volatile bool a;
     for ( int j=0; j<50; j++ ) {
         //s.clear();
         for ( int i=1; i<1500000; i++ ) {
             //printf("%d\n",i);
 #ifdef MY_HASH
 #ifdef STATIC_HASH
-            ni.check((int*)(i*101));
+            a = ni.check((int*)(i*101));
 #else
-            n.check((int*)(i*101));
+            a = n.check((int*)(i*101));
 #endif
 #else
             s.find((int*)(i*101));
