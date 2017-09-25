@@ -122,7 +122,7 @@ class hasher {
         mod = _mod; // TODO: reorder elements
         sz = _sz;
         tab = obj_realloc( tab, sz );
-        free(enter_tab);
+        free(enter_tab); // avoid copying
         enter_tab = obj_malloc<E*>( mod );
         obj_memzero( enter_tab, mod );
         auto _e = tab+n;
